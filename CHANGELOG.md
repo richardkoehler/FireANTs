@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+### unreleased - CPU kernels for fireants_fused_ops - changes
+
+- `fireants_fused_ops` now always builds CPU (C++/OpenMP) kernels for the 3D grid sampler, warp composer and warp generator, the fused cross-correlation (plus an O(N) box filter), the fused mutual information histograms, the fused Adam update and the FFT Gaussian blur; the CUDA kernels are added when a CUDA toolkit is found (`FIREANTS_FUSED_OPS_CPU_ONLY=1` forces a CPU-only build). Bindings dispatch on the tensor device (`fused_ops/src/DeviceDispatch.cpp`), `ffo.built_with_cuda()` reports the build type
+- the CPU kernels are bitwise reproducible from run to run for a fixed `torch.get_num_threads()`: reductions use partial sums per fixed chunk or a fixed chunk-to-buffer assignment instead of per-thread accumulators under dynamic scheduling
+- if PyTorch is a CUDA build but no CUDA toolkit is found, `setup.py` builds CPU kernels only and prints a warning (set `CUDA_HOME`, or `FIREANTS_FUSED_OPS_CPU_ONLY=1` to silence it); the Python side checks `built_with_cuda()`, so CUDA tensors then use the PyTorch fallbacks (with a one-time warning) and `fusedcc` / `fusedmi` fall back to `cc` / `mi`
+- on macOS the CPU kernels are built with OpenMP when `libomp` is found (`brew --prefix libomp`, or `FIREANTS_OPENMP_CFLAGS` / `FIREANTS_OPENMP_LDFLAGS`), otherwise they run single-threaded; on Windows `torch` must be imported before `fireants_fused_ops` (documented in `fused_ops/README.md`)
+- the interpolator dispatcher, `WarpAdam` and `downsample` use the fused ops for CPU tensors when the CPU kernels are available (2D ops and generic-label sampling stay on the torch path on CPU)
+- `GreedyRegistration.get_inverse_warp_parameters` now inverts `A x + u(x)` correctly when the affine is not the identity in normalized coordinates (fixed and moving images with different fields of view)
+- `WarpAdam` smoothing no longer copies the warp into channels-first memory before the separable convolution (CPU tensors only, CUDA behaviour is unchanged)
+- `fireants.io` imports on Windows (`fcntl` is only used where available)
+- modified files: `fireants/interpolator/__init__.py`, `fireants/io/image.py`, `fireants/losses/fusedcc.py`, `fireants/registration/abstract.py`, `fireants/registration/greedy.py`, `fireants/registration/optimizers/adam.py`, `fireants/utils/imageutils.py`, `fused_ops/setup.py`, `fused_ops/pyproject.toml`, `fused_ops/README.md`, `docs/docs/install.md`, `fused_ops/src/src.cpp`, `fused_ops/include/CrossCorrelation.h`, `fused_ops/include/MutualInformation.h`; CUDA-only tests now skip without CUDA; new tests in `tests/test_fusedops_cpu.py` and `tests/test_fusedops_fallback.py`
+
 ### 2026-04-08 - fireants 1.5.1, fireants_fused_ops 1.2.0 - changes
 
 added `compose_n` option to adam and sgd with reasonable defaults (n=1 for adam, n=10 for sgd)

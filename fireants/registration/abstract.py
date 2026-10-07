@@ -27,12 +27,17 @@ from torch.nn import functional as F
 from functools import partial
 from fireants.utils.imageutils import is_torch_float_type, downsample 
 from fireants.losses.cc import separable_filtering
-from fireants.interpolator import fireants_interpolator
+from fireants.interpolator import fireants_interpolator, ffo_device_supported, FFO_CPU_AVAILABLE, FFO_CUDA_AVAILABLE
 from fireants.io.keypoints import BatchedKeypoints
 import logging
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+def _check_fused_ops_device(device: torch.device):
+    ''' raise ImportError (handled like a missing package) if the installed fused ops have no kernels for this device '''
+    if not ffo_device_supported(torch.device(device).type, FFO_CPU_AVAILABLE, FFO_CUDA_AVAILABLE):
+        raise ImportError(f"fireants_fused_ops has no kernels for device '{torch.device(device).type}'")
 
 def dummy_loss(*args):
     return 0
@@ -149,11 +154,12 @@ class AbstractRegistration(ABC):
                                                                kernel_size=cc_kernel_size, reduction=reduction, **loss_params)
         elif loss_type == 'fusedcc':
             try:
+                _check_fused_ops_device(self.device)
                 from fireants.losses.fusedcc import FusedLocalNormalizedCrossCorrelationLoss
                 self.loss_fn = FusedLocalNormalizedCrossCorrelationLoss(spatial_dims=self.dims,
                                                         kernel_size=cc_kernel_size, reduction=reduction, **loss_params)
             except ImportError:
-                logger.warning("fireants_fused_ops not available, falling back to non-fused LocalNormalizedCrossCorrelationLoss")
+                logger.warning("fireants_fused_ops not available for this device, falling back to non-fused LocalNormalizedCrossCorrelationLoss")
                 self.loss_fn = LocalNormalizedCrossCorrelationLoss(kernel_type=cc_kernel_type, spatial_dims=self.dims,
                                                                    kernel_size=cc_kernel_size, reduction=reduction, **loss_params)
         elif loss_type == 'lite_lncc':
@@ -167,10 +173,11 @@ class AbstractRegistration(ABC):
                                                                    kernel_size=cc_kernel_size, reduction=reduction, **loss_params)
         elif loss_type == 'fusedmi':
             try:
+                _check_fused_ops_device(self.device)
                 from fireants.losses.fusedmi import FusedGlobalMutualInformationLoss
                 self.loss_fn = FusedGlobalMutualInformationLoss(kernel_type=mi_kernel_type, reduction=reduction, **loss_params)
             except ImportError:
-                logger.warning("fireants_fused_ops not available, falling back to non-fused GlobalMutualInformationLoss")
+                logger.warning("fireants_fused_ops not available for this device, falling back to non-fused GlobalMutualInformationLoss")
                 self.loss_fn = GlobalMutualInformationLoss(kernel_type=mi_kernel_type, reduction=reduction, **loss_params)
         elif loss_type == 'custom':
             self.loss_fn = custom_loss

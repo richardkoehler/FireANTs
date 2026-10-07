@@ -33,8 +33,8 @@ cd fused_ops
 python setup.py build_ext && python setup.py install
 cd ..
 ```
-This will build the required CUDA extensions and install the `fireants_fused_ops` package.
-You can find the incredible memory savings and runtime improvements in the [paper](https://arxiv.org/abs/2509.25044). Note that this package is only available for NVIDIA GPUs - sorry CPU and MPS users! If you are interested in implementing these fused ops for CPUs or other hardware, please [open an issue](https://github.com/rohitrango/fireants/issues/new) or [submit a pull request](https://github.com/rohitrango/fireants/pulls).
+This will build the required CUDA extensions (when a CUDA toolkit is found) and the CPU kernels, and install the `fireants_fused_ops` package. On Windows, import `torch` before `fireants_fused_ops`; on macOS, install OpenMP (`brew install libomp`) before building for multi-threaded CPU kernels. See [fused_ops/README.md](https://github.com/rohitrango/FireANTs/blob/main/fused_ops/README.md) for details.
+You can find the incredible memory savings and runtime improvements in the [paper](https://arxiv.org/abs/2509.25044). The 3D operations also run on CPU (C++/OpenMP kernels); MPS is not supported. If you are interested in implementing these fused ops for other hardware, please [open an issue](https://github.com/rohitrango/fireants/issues/new) or [submit a pull request](https://github.com/rohitrango/fireants/pulls).
 
 ## Docker 
 

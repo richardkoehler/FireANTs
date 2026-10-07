@@ -15,6 +15,9 @@
 
 import pytest
 pytest.importorskip("fireants_fused_ops")
+import torch
+if not torch.cuda.is_available():
+    pytest.skip("CUDA not available (the CPU kernels are tested in test_fusedops_cpu.py)", allow_module_level=True)
 
 import torch
 from time import time

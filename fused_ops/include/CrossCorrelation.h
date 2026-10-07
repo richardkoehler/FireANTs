@@ -13,6 +13,7 @@
 // For full license details, see: https://github.com/rohitrango/FireANTs/blob/main/LICENSE 
 
 
+#pragma once
 #include <torch/torch.h>
 #include <string>
 

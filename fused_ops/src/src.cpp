@@ -23,6 +23,7 @@
 #include "GaussianBlurFFT.h"
 #include "MutualInformation.h"
 #include "common.h"
+#include "DeviceDispatch.h"
 
 PYBIND11_MODULE(fireants_fused_ops, m) {
     // Reduction enum
@@ -38,80 +39,80 @@ PYBIND11_MODULE(fireants_fused_ops, m) {
             .value("DELTA", KernelType::DELTA).export_values();
 
     // cross-correlation forward
-    m.def("cc3d_fwd_interm_v1", &cc3d_fwd_interm_v1, "Forward pass of cross-correlation given intermediates", 
+    m.def("cc3d_fwd_interm_v1", &ffo_dispatch::cc3d_fwd_interm_v1, "Forward pass of cross-correlation given intermediates", 
     py::arg("intermediates"), py::arg("kernel_volume"), py::arg("reduction") = Reduction::MEAN, py::arg("nr") = 0.0, py::arg("dr") = 1e-5);
 
-    m.def("cc3d_bwd_modify_interm_v1", &cc3d_bwd_modify_interm_v1, "Backward pass of cross-correlation given intermediates", 
+    m.def("cc3d_bwd_modify_interm_v1", &ffo_dispatch::cc3d_bwd_modify_interm_v1, "Backward pass of cross-correlation given intermediates", 
     py::arg("intermediates"), py::arg("input_img"), py::arg("target_img"), py::arg("grad_output"), py::arg("grad_input_img"), py::arg("grad_target_img"), py::arg("kernel_size"), py::arg("kernel_volume"), py::arg("nr") = 0.0, py::arg("dr") = 1e-5, py::arg("reduction") = Reduction::MEAN);
 
-    m.def("create_intermediates", &create_intermediates, "Create intermediates for cross-correlation",
+    m.def("create_intermediates", &ffo_dispatch::create_intermediates, "Create intermediates for cross-correlation",
         py::arg("input_img"), py::arg("target_img"), py::arg("intermediates"));
 
-    m.def("cc3d_bwd_compute_grads", &cc3d_bwd_compute_grads, "Compute gradients for cross-correlation",
+    m.def("cc3d_bwd_compute_grads", &ffo_dispatch::cc3d_bwd_compute_grads, "Compute gradients for cross-correlation",
         py::arg("intermediates"), py::arg("input_img"), py::arg("target_img"), py::arg("grad_input_img"), py::arg("grad_target_img"));
     
     // grid sampler utils
-    m.def("fused_grid_sampler_3d_forward", &fused_grid_sampler_3d_forward_impl, "Forward pass for fused grid sample",
+    m.def("fused_grid_sampler_3d_forward", &ffo_dispatch::fused_grid_sampler_3d_forward_impl, "Forward pass for fused grid sample",
        py::arg("input"), py::arg("affine_3d"), py::arg("grid"), py::arg("affine_3d_pregrid"), py::arg("output"), py::arg("out_D"), py::arg("out_H"), py::arg("out_W"),
        py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_zmin"), py::arg("grid_xmax"), py::arg("grid_ymax"), py::arg("grid_zmax"),
        py::arg("is_displacement"), py::arg("interpolation_mode"), py::arg("padding_mode"), py::arg("align_corners"));
     
-    m.def("fused_grid_sampler_3d_backward", &fused_grid_sampler_3d_backward_impl, "Backward pass for fused grid sample",
+    m.def("fused_grid_sampler_3d_backward", &ffo_dispatch::fused_grid_sampler_3d_backward_impl, "Backward pass for fused grid sample",
         py::arg("input"), py::arg("affine_3d"), py::arg("grid"), py::arg("affine_3d_pregrid"), py::arg("grad_output"), py::arg("grad_input"), py::arg("grad_affine"), py::arg("grad_grid"),
         py::arg("out_D"), py::arg("out_H"), py::arg("out_W"), py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_zmin"), py::arg("grid_xmax"), py::arg("grid_ymax"), py::arg("grid_zmax"),
         py::arg("is_displacement"), py::arg("interpolation_mode"), py::arg("padding_mode"), py::arg("align_corners"));
 
     // 2D fused grid sampler
-    m.def("fused_grid_sampler_2d_forward", &fused_grid_sampler_2d_forward_impl, "Forward pass for 2D fused grid sample",
+    m.def("fused_grid_sampler_2d_forward", &ffo_dispatch::fused_grid_sampler_2d_forward_impl, "Forward pass for 2D fused grid sample",
        py::arg("input"), py::arg("affine_2d"), py::arg("grid"), py::arg("affine_2d_pregrid"), py::arg("output"), py::arg("out_H"), py::arg("out_W"),
        py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_xmax"), py::arg("grid_ymax"),
        py::arg("is_displacement"), py::arg("interpolation_mode"), py::arg("padding_mode"), py::arg("align_corners"));
 
-    m.def("fused_grid_sampler_2d_backward", &fused_grid_sampler_2d_backward_impl, "Backward pass for 2D fused grid sample",
+    m.def("fused_grid_sampler_2d_backward", &ffo_dispatch::fused_grid_sampler_2d_backward_impl, "Backward pass for 2D fused grid sample",
         py::arg("input"), py::arg("affine_2d"), py::arg("grid"), py::arg("affine_2d_pregrid"), py::arg("grad_output"), py::arg("grad_input"), py::arg("grad_affine"), py::arg("grad_grid"),
         py::arg("out_H"), py::arg("out_W"), py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_xmax"), py::arg("grid_ymax"),
         py::arg("is_displacement"), py::arg("interpolation_mode"), py::arg("padding_mode"), py::arg("align_corners"));
 
     // Generic label grid sampler (2D and 3D): int-valued labels, argmax over interpolated weights
-    m.def("fused_grid_sampler_2d_generic_label_forward", &fused_grid_sampler_2d_generic_label_forward_impl,
+    m.def("fused_grid_sampler_2d_generic_label_forward", &ffo_dispatch::fused_grid_sampler_2d_generic_label_forward_impl,
         py::arg("input"), py::arg("affine_2d"), py::arg("grid"), py::arg("affine_2d_pregrid"),
         py::arg("output_labels"), py::arg("output_weights"), py::arg("out_H"), py::arg("out_W"),
         py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_xmax"), py::arg("grid_ymax"),
         py::arg("is_displacement"), py::arg("padding_mode"), py::arg("align_corners"), py::arg("return_weight"),
         py::arg("background_label") = std::nullopt);
-    m.def("fused_grid_sampler_2d_generic_label_backward", &fused_grid_sampler_2d_generic_label_backward_impl,
+    m.def("fused_grid_sampler_2d_generic_label_backward", &ffo_dispatch::fused_grid_sampler_2d_generic_label_backward_impl,
         py::arg("input"), py::arg("affine_2d"), py::arg("grid"), py::arg("affine_2d_pregrid"),
         py::arg("output_labels"), py::arg("grad_weight"), py::arg("grad_affine"), py::arg("grad_grid"),
         py::arg("out_H"), py::arg("out_W"), py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_xmax"), py::arg("grid_ymax"),
         py::arg("is_displacement"), py::arg("padding_mode"), py::arg("align_corners"), py::arg("return_weight"));
-    m.def("fused_grid_sampler_3d_generic_label_forward", &fused_grid_sampler_3d_generic_label_forward_impl,
+    m.def("fused_grid_sampler_3d_generic_label_forward", &ffo_dispatch::fused_grid_sampler_3d_generic_label_forward_impl,
         py::arg("input"), py::arg("affine_3d"), py::arg("grid"), py::arg("grid_affine"),
         py::arg("output_labels"), py::arg("output_weights"), py::arg("out_D"), py::arg("out_H"), py::arg("out_W"),
         py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_zmin"), py::arg("grid_xmax"), py::arg("grid_ymax"), py::arg("grid_zmax"),
         py::arg("is_displacement"), py::arg("padding_mode"), py::arg("align_corners"), py::arg("return_weight"),
         py::arg("background_label") = std::nullopt);
-    m.def("fused_grid_sampler_3d_generic_label_backward", &fused_grid_sampler_3d_generic_label_backward_impl,
+    m.def("fused_grid_sampler_3d_generic_label_backward", &ffo_dispatch::fused_grid_sampler_3d_generic_label_backward_impl,
         py::arg("input"), py::arg("affine_3d"), py::arg("grid"), py::arg("grid_affine"),
         py::arg("output_labels"), py::arg("grad_weight"), py::arg("grad_affine"), py::arg("grad_grid"),
         py::arg("out_D"), py::arg("out_H"), py::arg("out_W"), py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_zmin"), py::arg("grid_xmax"), py::arg("grid_ymax"), py::arg("grid_zmax"),
         py::arg("is_displacement"), py::arg("padding_mode"), py::arg("align_corners"), py::arg("return_weight"));
 
     // grid composer utils
-    m.def("fused_grid_composer_3d_forward", &fused_grid_composer_3d_forward_impl, "Forward pass for fused grid composer",
+    m.def("fused_grid_composer_3d_forward", &ffo_dispatch::fused_grid_composer_3d_forward_impl, "Forward pass for fused grid composer",
         py::arg("input"), py::arg("affine_3d"), py::arg("grid"), py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_zmin"), py::arg("grid_xmax"), py::arg("grid_ymax"), py::arg("grid_zmax"),
         py::arg("align_corners"), py::arg("output"));
 
-    m.def("fused_grid_composer_3d_backward", &fused_grid_composer_3d_backward_impl, "Backward pass for fused grid composer",
+    m.def("fused_grid_composer_3d_backward", &ffo_dispatch::fused_grid_composer_3d_backward_impl, "Backward pass for fused grid composer",
         py::arg("input"), py::arg("affine_3d"), py::arg("grid"), py::arg("grad_output"), py::arg("grad_input"), py::arg("grad_affine"), py::arg("grad_grid"),
         py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_zmin"), py::arg("grid_xmax"), py::arg("grid_ymax"), py::arg("grid_zmax"), py::arg("align_corners"));
     
-    m.def("fused_grid_composer_2d_forward", &fused_grid_composer_2d_forward_impl, "Forward pass for 2D fused grid composer",
+    m.def("fused_grid_composer_2d_forward", &ffo_dispatch::fused_grid_composer_2d_forward_impl, "Forward pass for 2D fused grid composer",
         py::arg("input"), py::arg("affine_2d"), py::arg("grid"), 
         py::arg("grid_xmin"), py::arg("grid_ymin"), 
         py::arg("grid_xmax"), py::arg("grid_ymax"),
         py::arg("align_corners"), py::arg("output"));
 
-    m.def("fused_grid_composer_2d_backward", &fused_grid_composer_2d_backward_impl, "Backward pass for 2D fused grid composer",
+    m.def("fused_grid_composer_2d_backward", &ffo_dispatch::fused_grid_composer_2d_backward_impl, "Backward pass for 2D fused grid composer",
         py::arg("input"), py::arg("affine_2d"), py::arg("grid"), 
         py::arg("grad_output"), py::arg("grad_input"), 
         py::arg("grad_affine"), py::arg("grad_grid"),
@@ -119,25 +120,31 @@ PYBIND11_MODULE(fireants_fused_ops, m) {
         py::arg("grid_xmax"), py::arg("grid_ymax"), 
         py::arg("align_corners"));
     
-    m.def("fused_warp_create_3d_forward", &fused_warp_create_3d_forward_impl, "Forward pass for fused warp create",
+    m.def("fused_warp_create_3d_forward", &ffo_dispatch::fused_warp_create_3d_forward_impl, "Forward pass for fused warp create",
         py::arg("affine"), py::arg("grid"), py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_zmin"), py::arg("grid_xmax"), py::arg("grid_ymax"), py::arg("grid_zmax"));
 
-    m.def("fused_warp_create_3d_backward", &fused_warp_create_3d_backward_impl, "Backward pass for fused warp create",
+    m.def("fused_warp_create_3d_backward", &ffo_dispatch::fused_warp_create_3d_backward_impl, "Backward pass for fused warp create",
         py::arg("affine"), py::arg("grid"), py::arg("grad_output"), py::arg("grad_affine"), py::arg("grad_grid"),
         py::arg("grid_xmin"), py::arg("grid_ymin"), py::arg("grid_zmin"), py::arg("grid_xmax"), py::arg("grid_ymax"), py::arg("grid_zmax"));
     
-    m.def("adam_update_fused", &adam_update_fused, "Adam update fused",
+    m.def("adam_update_fused", &ffo_dispatch::adam_update_fused, "Adam update fused",
         py::arg("grad"), py::arg("exp_avg"), py::arg("exp_avg_sq"), py::arg("beta1"), py::arg("beta2"), py::arg("eps"));
     
     // gaussian blur in fft space
-    m.def("gaussian_blur_fft2", &gaussian_blur_fft2, "Gaussian blur in fft space",
+    m.def("gaussian_blur_fft2", &ffo_dispatch::gaussian_blur_fft2, "Gaussian blur in fft space",
         py::arg("im_fft"), py::arg("ys"), py::arg("xs"), py::arg("ye"), py::arg("xe"), py::arg("multiplier"));
     
-    m.def("gaussian_blur_fft3", &gaussian_blur_fft3, "Gaussian blur in fft space",
+    m.def("gaussian_blur_fft3", &ffo_dispatch::gaussian_blur_fft3, "Gaussian blur in fft space",
         py::arg("im_fft"), py::arg("zs"), py::arg("ys"), py::arg("xs"), py::arg("ze"), py::arg("ye"), py::arg("xe"), py::arg("multiplier"));
     
-    m.def("mutual_information_histogram_fwd", &mutual_information_histogram_fwd, "Mutual information histogram forward", py::arg("input_img"), py::arg("target_img"), py::arg("num_bins"), py::arg("kernel_type") = KernelType::GAUSSIAN, py::arg("minval") = 0.0, py::arg("maxval") = 1.0, py::arg("sigma_ratio") = 1.0, py::arg("approximate_reduction") = false);
+    m.def("mutual_information_histogram_fwd", &ffo_dispatch::mutual_information_histogram_fwd, "Mutual information histogram forward", py::arg("input_img"), py::arg("target_img"), py::arg("num_bins"), py::arg("kernel_type") = KernelType::GAUSSIAN, py::arg("minval") = 0.0, py::arg("maxval") = 1.0, py::arg("sigma_ratio") = 1.0, py::arg("approximate_reduction") = false);
 
-    m.def("mutual_information_histogram_bwd", &mutual_information_histogram_bwd, "Mutual information histogram backward", py::arg("input_img"), py::arg("target_img"), py::arg("grad_pab"), py::arg("grad_pa"), py::arg("grad_pb"), py::arg("num_bins"), py::arg("grad_input_img"), py::arg("grad_target_img"), py::arg("kernel_type") = KernelType::GAUSSIAN, py::arg("minval") = 0.0, py::arg("maxval") = 1.0, py::arg("sigma_ratio") = 1.0);
+    m.def("mutual_information_histogram_bwd", &ffo_dispatch::mutual_information_histogram_bwd, "Mutual information histogram backward", py::arg("input_img"), py::arg("target_img"), py::arg("grad_pab"), py::arg("grad_pa"), py::arg("grad_pb"), py::arg("num_bins"), py::arg("grad_input_img"), py::arg("grad_target_img"), py::arg("kernel_type") = KernelType::GAUSSIAN, py::arg("minval") = 0.0, py::arg("maxval") = 1.0, py::arg("sigma_ratio") = 1.0);
+
+    // in-place box (mean) filter, used by the fused cross-correlation on CPU
+    m.def("box_filter_3d", &ffo_dispatch::box_filter_3d, "In-place zero-padded box mean filter along the three spatial dimensions (CPU only)",
+        py::arg("input"), py::arg("kernel_size"));
+
+    m.def("built_with_cuda", &ffo_dispatch::built_with_cuda, "Whether the CUDA kernels were compiled into this build (CPU kernels are always available)");
 
 }

@@ -57,7 +57,10 @@ class FusedNCC3d(torch.autograd.Function):
         # compute kernel
         kernel_vol = kernel_size ** 3
 
-        if use_separable:
+        if interm.device.type == 'cpu':
+            # the box filter is separable, both branches below compute the same mean filter
+            ffo.box_filter_3d(interm, kernel_size)
+        elif use_separable:
             if interm.numel() >= MAX_INT32_NUMEL:
                 # numel is too large for group convolution, fallback to singular
                 filt1 = torch.ones(1, 1, kernel_size, 1, 1, device=input_img.device, dtype=input_img.dtype) / kernel_size
@@ -134,7 +137,11 @@ class FusedNCC3d(torch.autograd.Function):
         ffo.cc3d_bwd_modify_interm_v1(interm, input_img, target_img, grad_output, grad_input_img, grad_target_img, kernel_size, kernel_vol, nr, dr, reduction)
         # convolve with average filter depending on whether grad_target_img is None
         # if using ants_gradient, the convolution is skipped (ignore interactions from other neighboring pixels)
-        if not use_ants_gradient:
+        if not use_ants_gradient and interm.device.type == 'cpu':
+            nchannels = 5*C if grad_target_img is not None else 3*C
+            for b in range(B):
+                ffo.box_filter_3d(interm[b:b+1, :nchannels], kernel_size)
+        elif not use_ants_gradient:
             padding = (kernel_size - 1) // 2
             if grad_target_img is not None:
                 # convolve with "one" filter depending on whether separable or not

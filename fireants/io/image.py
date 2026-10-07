@@ -35,10 +35,15 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 from fireants.registration.distributed import parallel_state
 from contextlib import contextmanager
-import fcntl
 
 @contextmanager
 def get_lock():
+    try:
+        import fcntl
+    except ImportError:
+        # no fcntl (Windows): writes are not serialized across ranks
+        yield
+        return
     rank = parallel_state.get_data_parallel_rank() if parallel_state.is_initialized() else 0
     with open("/tmp/fireants_image_lock", "w") as fi:
         try:
@@ -142,8 +147,8 @@ class Image:
             # add batch dimension
             self.array.unsqueeze_(0)
         else:
-            # When FFO is not available, force one-hot mode so generic-label path is never used
-            if not fi.use_ffo:
+            # When FFO is not available (the generic-label kernels are CUDA-only), force one-hot mode so generic-label path is never used
+            if not fi.use_ffo or torch.device(device).type != 'cuda':
                 is_onehot = True
             self.is_onehot = is_onehot
             array = torch.from_numpy(sitk.GetArrayFromImage(itk_image).astype(int)).float().to(device)

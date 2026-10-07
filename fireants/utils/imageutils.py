@@ -22,6 +22,7 @@ from fireants.utils.util import catchtime
 from typing import Optional, List
 from fireants.losses.cc import gaussian_1d, separable_filtering
 from fireants.types import ItemOrList
+from fireants.interpolator import ffo_device_supported, FFO_CPU_AVAILABLE, FFO_CUDA_AVAILABLE
 import warnings
 from enum import Enum
 import logging
@@ -133,7 +134,7 @@ def downsample(image: torch.Tensor, size: List[int], mode: str, sigma: Optional[
     if use_fft and ffo is None:
         logger.warn("fireants_fused_ops is not found, will default to standard downsampling")
         use_fft = False
-    if image.device.type == 'cpu':
+    if use_fft and not ffo_device_supported(image.device.type, FFO_CPU_AVAILABLE, FFO_CUDA_AVAILABLE):
         use_fft = False
 
     if use_fft:

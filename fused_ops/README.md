@@ -12,6 +12,14 @@ The performance benefits are staggering - the interpolation, warp composition, a
 ## Installation
 Make sure that `fireants` and `fireants_fused_ops` are installed. See the [README.md](../README.md) for more details.
 
+### CPU kernels
+The 3D interpolation, warp composition, cross correlation, mutual information, Adam and FFT blur operations also have C++/OpenMP CPU kernels with the same API; they are always compiled, and the CUDA kernels are added when a CUDA toolkit is found (`CUDA_HOME`). The CPU kernels use `torch.get_num_threads()` threads and give bitwise identical results from run to run for a fixed number of threads. 2D operations and generic-label interpolation are CUDA-only and fall back to PyTorch on CPU.
+
+- `FIREANTS_FUSED_OPS_CPU_ONLY=1` builds only the CPU kernels. If PyTorch is a CUDA build but no CUDA toolkit is found, the build also produces CPU kernels only and prints a warning; CUDA tensors then use the PyTorch fallbacks (`ffo.built_with_cuda()` tells which kernels were built).
+- Without CUDA the build needs only a C++ compiler. On Windows, build from a Visual Studio developer prompt.
+- On Windows, import `torch` before `fireants_fused_ops` (`import torch` first), otherwise the extension fails with `DLL load failed`.
+- On macOS, Apple clang has no OpenMP, so the CPU kernels run single-threaded unless OpenMP is available at build time: `brew install libomp` (found automatically through `brew --prefix libomp`), or set `FIREANTS_OPENMP_CFLAGS` and `FIREANTS_OPENMP_LDFLAGS` explicitly.
+
 ## Basic Usage
 
 > [!NOTE] 

@@ -19,7 +19,7 @@ from torch.nn import functional as F
 # from fireants.utils.imageutils import compute_inverse_warp_displacement
 from fireants.utils.imageutils import jacobian as jacobian_fn
 from fireants.losses.cc import separable_filtering
-from fireants.interpolator import fireants_interpolator
+from fireants.interpolator import fireants_interpolator, ffo_device_supported, FFO_CPU_AVAILABLE, FFO_CUDA_AVAILABLE
 from fireants.registration.distributed.utils import add_distributed_padding, crop_distributed_padding
 import logging
 logger = logging.getLogger(__name__)
@@ -80,6 +80,10 @@ except ImportError:
     adam_update_fused = adam_update_fused_baseline
 
 ## Function for smoothing
+def _permute_for_filtering(tensor, permute_vtoimg):
+    tensor = tensor.permute(*permute_vtoimg)
+    return tensor if tensor.device.type == 'cpu' else tensor.contiguous()
+
 def _get_smoothing_wrapper(optimizer):
     '''
     Get wrapper for smoothing
@@ -95,7 +99,7 @@ def _get_smoothing_wrapper(optimizer):
     if gp_size <= 1:
         def smoothing_wrapper_nodist(tensor, kernels, padding=0):
             # tensor is a warp field
-            tensor = separable_filtering(tensor.permute(*permute_vtoimg).contiguous(), kernels).permute(*permute_imgtov).contiguous()
+            tensor = separable_filtering(_permute_for_filtering(tensor, permute_vtoimg), kernels).permute(*permute_imgtov).contiguous()
             return tensor
         return smoothing_wrapper_nodist
     else:
@@ -104,7 +108,7 @@ def _get_smoothing_wrapper(optimizer):
         def smoothing_wrapper_dist(tensor, kernels, padding=0):
             if padding > 0:
                 tensor = add_distributed_padding(tensor, padding, dim_to_shard-1) # 2 will be added to dim_to_shard anyway
-            tensor = separable_filtering(tensor.permute(*permute_vtoimg).contiguous(), kernels).permute(*permute_imgtov).contiguous()
+            tensor = separable_filtering(_permute_for_filtering(tensor, permute_vtoimg), kernels).permute(*permute_imgtov).contiguous()
             if padding > 0:
                 tensor = crop_distributed_padding(tensor, padding, dim_to_shard-1)
             return tensor
@@ -157,7 +161,8 @@ class WarpAdam:
         self.scaledown = scaledown   # if true, the scale the gradient even if norm is below 1
         # offload params
         self.device = warp.device
-        self.adam_update_kernel = adam_update_fused if self.device.type == 'cuda' else adam_update_fused_baseline
+        use_fused_kernel = ffo_device_supported(self.device.type, FFO_CPU_AVAILABLE, FFO_CUDA_AVAILABLE)
+        self.adam_update_kernel = adam_update_fused if use_fused_kernel else adam_update_fused_baseline
         self.offload = offload
         # warp grad params
         self.exp_avg = torch.zeros_like(warp, device=self.device if not self.offload else 'cpu')

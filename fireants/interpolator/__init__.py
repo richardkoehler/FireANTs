@@ -46,8 +46,38 @@ except ImportError:
     fused_grid_sampler_2d_generic_label = None
     fused_grid_sampler_3d_generic_label = None
 
+# builds that expose `built_with_cuda` also contain CPU kernels for the 3D ops, builds without it are CUDA-only
+FFO_CPU_AVAILABLE = FFO_AVAILABLE and hasattr(ffo, 'built_with_cuda')
+FFO_CUDA_AVAILABLE = FFO_AVAILABLE and (not hasattr(ffo, 'built_with_cuda') or ffo.built_with_cuda())
+
 # Get environment variable with default True
 USE_FFO = os.getenv('USE_FFO', 'True').lower() == 'true'
+
+_warned_no_cuda_kernels = False
+
+def ffo_device_supported(device_type: str, cpu_available: bool, cuda_available: bool) -> bool:
+    ''' check if a build with the given kernels has fused ops for tensors on this device type '''
+    return (device_type == 'cuda' and cuda_available) or (device_type == 'cpu' and cpu_available)
+
+def ffo_tensors_supported(device_types, ndims, mode, cpu_available: bool, cuda_available: bool) -> bool:
+    ''' check if the fused ops can run on tensors with these device types and numbers of dimensions '''
+    device_types = set(device_types)
+    if len(device_types) != 1:
+        return False
+    device_type = device_types.pop()
+    if not ffo_device_supported(device_type, cpu_available, cuda_available):
+        return False
+    # on CPU only the 3D ops (5D tensors) have kernels, generic-label sampling is CUDA-only
+    return device_type == 'cuda' or (mode != 'genericlabel' and any(n == 5 for n in ndims))
+
+def ffo_supports_tensors(tensors, mode=None) -> bool:
+    ''' check if the installed fused ops can run on these tensors, otherwise callers fall back to PyTorch '''
+    global _warned_no_cuda_kernels
+    device_types = set(x.device.type for x in tensors)
+    if device_types == {'cuda'} and FFO_AVAILABLE and not FFO_CUDA_AVAILABLE and not _warned_no_cuda_kernels:
+        _warned_no_cuda_kernels = True
+        logger.warning("fireants_fused_ops was built without CUDA support, falling back to PyTorch for CUDA tensors")
+    return ffo_tensors_supported(device_types, [x.ndim for x in tensors], mode, FFO_CPU_AVAILABLE, FFO_CUDA_AVAILABLE)
 
 class GridSampleDispatcher:
     """Dispatcher for grid sample operations that handles both fused and non-fused implementations."""
@@ -107,12 +137,12 @@ class GridSampleDispatcher:
     
     @staticmethod
     def augment_registry_backend(func: Callable):
-        ''' For each function, we want to fallback to torch if the tensor is not on cuda '''
+        ''' For each function, we want to fallback to torch if the fused ops cannot run on the tensors' device '''
         def wrapper(self, *args, **kwargs):
             prev_ffo = self._use_ffo
             # get any tensor arg
             tensor_arg = [arg for arg in args if isinstance(arg, torch.Tensor)] + [arg for arg in kwargs.values() if isinstance(arg, torch.Tensor)]
-            if len(tensor_arg) > 0 and any([x.device.type != 'cuda' for x in tensor_arg]):
+            if len(tensor_arg) > 0 and not ffo_supports_tensors(tensor_arg, kwargs.get("mode")):
                 self._use_ffo = False
             ret = func(self, *args, **kwargs)
             self._use_ffo = prev_ffo

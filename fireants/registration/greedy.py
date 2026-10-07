@@ -167,29 +167,26 @@ class GreedyRegistration(AbstractRegistration, DeformableMixin):
         else:
             shape = [moving_arrays.shape[0], 1] + list(shape) if use_moving_shape else [fixed_arrays.shape[0], 1] + list(shape)
 
-        warp = self.warp.get_warp().detach().clone()
-        warp_inv = compositive_warp_inverse(moving_images if use_moving_shape else fixed_images, warp, scales=self.scales, iterations=self.iterations, displacement=True)
-        # resample if needed
-        mode = "bilinear" if self.dims == 2 else "trilinear"
-        if tuple(warp_inv.shape[1:-1]) != tuple(shape[2:]):
-            warp_inv = F.interpolate(warp_inv.permute(*self.warp.permute_vtoimg), size=shape[2:], mode=mode, align_corners=True).permute(*self.warp.permute_imgtov)
-
-
         # get affine transform
         fixed_t2p: torch.Tensor = fixed_images.get_torch2phy().to(self.dtype)
         moving_p2t = moving_images.get_phy2torch().to(self.dtype)
-
-        # save initial affine transform to initialize grid
         affine_map_init = torch.matmul(moving_p2t, torch.matmul(self.affine, fixed_t2p))
         affine_map_inv  = torch.linalg.inv(affine_map_init)
-        # get A^-1 * v[y]
+
+        # the forward map is phi(x) = A x + u(x) = A (x + A^-1 u(x)) with u on the fixed grid,
+        # so phi^-1(y) = A^-1 y + w(A^-1 y) where Id + w is the inverse of Id + A^-1 u (on the fixed grid)
+        warp = self.warp.get_warp().detach().clone()
         if self.dims == 2:
-            warp_inv = torch.einsum('bhwx,byx->bhwy', warp_inv, affine_map_inv[:, :-1, :-1])
+            warp = torch.einsum('bhwx,byx->bhwy', warp, affine_map_inv[:, :-1, :-1])
         elif self.dims == 3:
-            warp_inv = torch.einsum('bhwdx,byx->bhwdy', warp_inv, affine_map_inv[:, :-1, :-1])
+            warp = torch.einsum('bhwdx,byx->bhwdy', warp, affine_map_inv[:, :-1, :-1])
         else:
             raise ValueError('Invalid number of dimensions: {}'.format(self.dims))
-        #### grid = A^-1 y - A^-1 b = apply A^-1 to regular grid
+        warp_inv = compositive_warp_inverse(fixed_images, warp.contiguous(), scales=self.scales, iterations=self.iterations, displacement=True)
+        # evaluate w at A^-1 y for y on the requested grid
+        warp_inv = fireants_interpolator(warp_inv.permute(*self.warp.permute_vtoimg).contiguous(), affine=affine_map_inv[:, :-1].contiguous(),
+                                         out_shape=shape[2:], mode='bilinear', align_corners=True)
+        warp_inv = warp_inv.permute(*self.warp.permute_imgtov).contiguous()
         return {
             'affine': affine_map_inv[:, :-1].contiguous(),
             'grid': warp_inv,
