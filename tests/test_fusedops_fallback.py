@@ -138,3 +138,14 @@ def test_downsample_ignores_fft_kernels_missing_for_device(monkeypatch):
     image = torch.rand(1, 1, 8, 8, 8)
     out = imageutils.downsample(image, [4, 4, 4], "trilinear", use_fft=True)
     assert out.shape == (1, 1, 4, 4, 4) and not calls
+
+
+def test_downsample_never_uses_fft_on_cpu(monkeypatch):
+    import fireants.utils.imageutils as imageutils
+    monkeypatch.setattr(imageutils, "FFO_CPU_AVAILABLE", True)
+    monkeypatch.setattr(imageutils, "ffo", object())
+    calls = []
+    monkeypatch.setattr(imageutils, "downsample_fft", lambda *a, **k: calls.append(1))
+    image = torch.rand(1, 1, 8, 8, 8)
+    out = imageutils.downsample(image, [4, 4, 4], "trilinear", use_fft=True)
+    assert out.shape == (1, 1, 4, 4, 4) and not calls

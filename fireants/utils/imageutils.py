@@ -134,6 +134,8 @@ def downsample(image: torch.Tensor, size: List[int], mode: str, sigma: Optional[
     if use_fft and ffo is None:
         logger.warn("fireants_fused_ops is not found, will default to standard downsampling")
         use_fft = False
+    if image.device.type == 'cpu':
+        use_fft = False
     if use_fft and not ffo_device_supported(image.device.type, FFO_CPU_AVAILABLE, FFO_CUDA_AVAILABLE):
         use_fft = False
 
